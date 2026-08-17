@@ -55,11 +55,15 @@ async def on_ready():
 FFMPEG_OPTIONS = {'options': '-vn'}
 
 # 🌟 SOUNDCLOUD OPTIMIZED CONFIGURATION
+# 🌟 UPDATED SOUNDCLOUD CONFIGURATION TO BYPASS DRM TRACKS
 YDL_OPTIONS = {
     'format': 'bestaudio/best', 
     'noplaylist': 'True',
-    'default_search': 'scsearch', # <- Automatically routes all plain text searches to SoundCloud
+    'default_search': 'scsearch',
+    'ignoreerrors': True,         # Skip broken/DRM tracks automatically
+    'source_address': '0.0.0.0', # Prevents geographic IP blocking on Render
 }
+
 
 @bot.tree.command(name="play", description="Type ANY song name to play instantly from SoundCloud")
 async def play(interaction: discord.Interaction, search: str):

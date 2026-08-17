@@ -29,8 +29,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ==========================================
 # ⚠️ PLACE YOUR ID NUMBERS EXACTLY HERE:
 # ==========================================
-VOICE_CHANNEL_ID = 1537096867215843439
-MY_SERVER_ID = 1536466519012151362
+VOICE_CHANNEL_ID = 123456789012345678
+MY_SERVER_ID = 123456789012345678
 
 SPOTIFY_TRACK_REGEX = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
 
@@ -54,14 +54,14 @@ async def on_ready():
 
 FFMPEG_OPTIONS = {'options': '-vn'}
 
-# 🌟 CRITICAL FIX: Explicitly forcing the extraction engine to use YouTube Music globally
+# 🌟 SOUNDCLOUD OPTIMIZED CONFIGURATION
 YDL_OPTIONS = {
     'format': 'bestaudio/best', 
     'noplaylist': 'True',
-    'default_search': 'ytsearch', 
+    'default_search': 'scsearch', # <- Automatically routes all plain text searches to SoundCloud
 }
 
-@bot.tree.command(name="play", description="Type ANY song name or artist to play instantly")
+@bot.tree.command(name="play", description="Type ANY song name to play instantly from SoundCloud")
 async def play(interaction: discord.Interaction, search: str):
     await interaction.response.defer()
     
@@ -84,27 +84,25 @@ async def play(interaction: discord.Interaction, search: str):
             track_id = spotify_match.group(1)
             track_info = sp.track(track_id)
             track_name = track_info['name']
-            artist_name = track_info['artists'][0]['name']
+            artist_name = track_info['artists']['name']
             search_query = f"{track_name} {artist_name}"
         except Exception as e:
             print(f"Spotify API Error: {e}")
 
     try:
-        # 🌟 FIXED SEARCH ROUTING BLOCK
-        # If it is a direct link (like YouTube or Spotify), extract it directly.
-        # If it is plain text, use standard search logic.
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+            # 🌟 CHANGED: Using 'scsearch:' to look up plain text queries on SoundCloud
             if not search_query.startswith("http"):
-                info = ydl.extract_info(f"ytsearch:{search_query}", download=False)
+                info = ydl.extract_info(f"scsearch:{search_query}", download=False)
             else:
                 info = ydl.extract_info(search_query, download=False)
             
             if 'entries' in info and len(info['entries']) > 0:
-                video_data = info['entries'][0] # Target first item in list array safely
+                video_data = info['entries']
             elif 'url' in info:
                 video_data = info
             else:
-                return await interaction.followup.send("Could not find any music matching that name.")
+                return await interaction.followup.send("Could not find any music matching that name on SoundCloud.")
                 
             url = video_data['url']
             title = video_data['title']
@@ -117,11 +115,11 @@ async def play(interaction: discord.Interaction, search: str):
             volume_source = discord.PCMVolumeTransformer(raw_source, volume=0.5)
             
             ctx_voice.play(volume_source)
-            await interaction.followup.send(f"🎶 Now playing: **{title}** by *{uploader}* (Volume: 50%)")
+            await interaction.followup.send(f"☁️ Now playing from SoundCloud: **{title}** by *{uploader}* (Volume: 50%)")
             
     except Exception as e:
         print(f"Playback Error: {e}")
-        await interaction.followup.send(f"An error occurred while trying to play: {e}")
+        await interaction.followup.send(f"An error occurred while trying to play from SoundCloud: {e}")
 
 @bot.tree.command(name="volume", description="Adjust the bot's volume level (1 to 100)")
 @app_commands.describe(level="Volume level from 1 to 100")
@@ -147,3 +145,4 @@ async def leave(interaction: discord.Interaction):
 
 keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])
+

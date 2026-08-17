@@ -1,3 +1,4 @@
 discord.py[voice]
 Flask
 PyNaCl
+yt-dlp

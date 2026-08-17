@@ -18,9 +18,28 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 VOICE_CHANNEL_ID = 123456789012345678 
 
+# Replace this number with your actual Server (Guild) ID
+MY_SERVER_ID = 123456789012345678  
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
+    
+    try:
+        # 1. Copy global commands to your specific test server
+        guild = discord.Object(id=MY_SERVER_ID)
+        bot.tree.copy_global_to(guild=guild)
+        
+        # 2. Sync directly to that server for instant activation
+        synced = await bot.tree.sync(guild=guild)
+        print(f"Instantly synced {len(synced)} slash commands to server {MY_SERVER_ID}!")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
+        
+    channel = bot.get_channel(VOICE_CHANNEL_ID)
+    if channel: 
+        await channel.connect()
+
     
     # NEW: This automatically registers your slash commands with Discord global servers
     try:

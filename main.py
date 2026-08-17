@@ -1,33 +1,37 @@
 import os
 import discord
+from discord import app_commands  # NEW: Import slash command tools
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
+import yt_dlp as youtube_dl
 
-# 1. Web server setup to bypass free hosting sleep timers
 app = Flask('')
-
 @app.route('/')
-def home():
-    return "Bot is alive!"
+def home(): return "Bot is alive!"
+def run(): app.run(host='0.0.0.0', port=8080)
+def keep_alive(): Thread(target=run).start()
 
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-# 2. Discord Bot Setup
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Replace with your actual Discord Voice Channel ID
-VOICE_CHANNEL_ID = 123456789012345678  
+VOICE_CHANNEL_ID = 123456789012345678 
 
 @bot.event
 async def on_ready():
+    print(f'Logged in as {bot.user.name}')
+    
+    # NEW: This automatically registers your slash commands with Discord global servers
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} slash commands!")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
+        
+    channel = bot.get_channel(VOICE_CHANNEL_ID)
+    if channel: await channel.connect()
+ on_ready():
     print(f'Logged in as {bot.user.name}')
     channel = bot.get_channel(VOICE_CHANNEL_ID)
     if channel:
@@ -74,24 +78,42 @@ from discord.ext import commands
 FFMPEG_OPTIONS = {'options': '-vn'}
 YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist': 'True'}
 
-@bot.command()
-async def play(ctx, *, search: str):
-    # Ensure user is in a voice channel
-    if not ctx.author.voice:
-        return await ctx.send("You must be in a voice channel to play music.")
+# 1. Slash command for Play
+@bot.tree.command(name="play", description="Plays a song from YouTube")
+async def play(interaction: discord.Interaction, search: str):
+    # Slash commands require you to defer or respond within 3 seconds so they don't timeout
+    await interaction.response.defer()
     
-    # Join the voice channel
-    if not ctx.voice_client:
-        await ctx.author.voice.channel.connect()
+    if not interaction.user.voice:
+        return await interaction.followup.send("You must be in a voice channel to play music.")
     
-    async with ctx.typing():
-        # Search for and stream audio
+    # Check if bot is already in a VC
+    ctx_voice = interaction.guild.voice_client
+    if not ctx_voice:
+        ctx_voice = await interaction.user.voice.channel.connect()
+    
+    try:
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+            # Look up the track
             info = ydl.extract_info(f"ytsearch:{search}", download=False)['entries'][0]
             url = info['url']
+            title = info['title']
+            
             source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
-            ctx.voice_client.play(source)
-            await ctx.send(f"Playing: {info['title']}")
+            ctx_voice.play(source)
+            await interaction.followup.send(f"Now playing: **{title}** 🎶")
+    except Exception as e:
+        await interaction.followup.send(f"An error occurred: {e}")
+
+# 2. Slash command for Leave
+@bot.tree.command(name="leave", description="Stops music and leaves the voice channel")
+async def leave(interaction: discord.Interaction):
+    if interaction.guild.voice_client:
+        await interaction.guild.voice_client.disconnect()
+        await interaction.response.send_message("Disconnected. 👋")
+    else:
+        await interaction.response.send_message("I am not in a voice channel.")
+
 
 
 # ==========================================

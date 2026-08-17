@@ -56,7 +56,7 @@ FFMPEG_OPTIONS = {'options': '-vn'}
 YDL_OPTIONS = {
     'format': 'bestaudio/best', 
     'noplaylist': 'True',
-    'default_search': 'ytsearch', # Fallback query method
+    'default_search': 'ytmsearch', # Fallback query method
 }
 
 @bot.tree.command(name="play", description="Type ANY song name or artist to play instantly")

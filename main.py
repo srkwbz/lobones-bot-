@@ -4,8 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
-import urllib.request
-import json
+import yt_dlp as youtube_dl
 
 app = Flask('')
 
@@ -30,6 +29,19 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 VOICE_CHANNEL_ID = 1537096867215843439
 MY_SERVER_ID = 1536466519012151362
 
+FFMPEG_OPTIONS = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
+
+# Configured to look up plain text queries securely on SoundCloud
+YDL_OPTIONS = {
+    'format': 'bestaudio/best', 
+    'noplaylist': 'True',
+    'default_search': 'scsearch',
+    'source_address': '0.0.0.0',
+}
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
@@ -48,12 +60,7 @@ async def on_ready():
         except Exception as e:
             print(f"Voice connection error on boot: {e}")
 
-FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
-}
-
-@bot.tree.command(name="play", description="Type a genre or station name to stream live audio instantly (e.g. lofi, rock, chill)")
+@bot.tree.command(name="play", description="Type ANY song or artist name to play from SoundCloud")
 async def play(interaction: discord.Interaction, search: str):
     await interaction.response.defer()
     
@@ -68,36 +75,42 @@ async def play(interaction: discord.Interaction, search: str):
             return await interaction.followup.send(f"Could not connect to voice channel: {e}")
 
     try:
-        # Search the global public radio API using the search keyword
-        encoded_query = urllib.parse.quote(search.strip())
-        api_url = f"https://radio-browser.info{encoded_query}"
-        
-        req = urllib.request.Request(api_url, headers={'User-Agent': 'DiscordBot/1.0'})
-        with urllib.request.urlopen(req) as response:
-            stations = json.loads(response.read().decode())
+        with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+            # Enforce search query parameter formatting rules
+            if not search.startswith("http"):
+                info = ydl.extract_info(f"scsearch:{search}", download=False)
+            else:
+                info = ydl.extract_info(search, download=False)
             
-        if not stations:
-            return await interaction.followup.send(f"Could not find any live streams matching: **{search}**")
+            if info is None:
+                return await interaction.followup.send("No results found or track is unavailable.")
+                
+            # Safely navigate lists vs dictionaries to prevent 'list indices' crash
+            if 'entries' in info:
+                if len(info['entries']) > 0:
+                    video_data = info['entries'][0]
+                else:
+                    return await interaction.followup.send("Could not find any matching results on SoundCloud.")
+            else:
+                video_data = info
+                
+            url = video_data['url']
+            title = video_data.get('title', 'Unknown Title')
+            uploader = video_data.get('uploader', 'Unknown Artist')
             
-        # Select the first functional station match
-        station_data = stations[0]
-        stream_url = station_data['url_resolved']
-        station_name = station_data['name']
-        tags = station_data.get('tags', 'music')
-        
-        if ctx_voice.is_playing():
-            ctx_voice.stop()
+            if ctx_voice.is_playing():
+                ctx_voice.stop()
+                
+            # Uses standard PCM stream decoding to completely avoid 'AudioSource must not be Opus encoded'
+            raw_source = discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS)
+            volume_source = discord.PCMVolumeTransformer(raw_source, volume=0.5)
             
-        # Stream the raw audio directly without downloading/parsing packages
-        raw_source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
-        volume_source = discord.PCMVolumeTransformer(raw_source, volume=0.5)
-        
-        ctx_voice.play(volume_source)
-        await interaction.followup.send(f"📻 Now streaming live: **{station_name}** ({tags}) (Volume: 50%)")
-        
+            ctx_voice.play(volume_source)
+            await interaction.followup.send(f"☁️ Now playing: **{title}** by *{uploader}* (Volume: 50%)")
+            
     except Exception as e:
-        print(f"Stream Error: {e}")
-        await interaction.followup.send(f"An error occurred while trying to connect to the stream: {e}")
+        print(f"Playback Error: {e}")
+        await interaction.followup.send(f"An error occurred while trying to play: {e}")
 
 @bot.tree.command(name="volume", description="Adjust the bot's volume level (1 to 100)")
 @app_commands.describe(level="Volume level from 1 to 100")

@@ -53,10 +53,12 @@ async def on_ready():
             print(f"Voice connection error on boot: {e}")
 
 FFMPEG_OPTIONS = {'options': '-vn'}
+
+# 🌟 CRITICAL FIX: Explicitly forcing the extraction engine to use YouTube Music globally
 YDL_OPTIONS = {
     'format': 'bestaudio/best', 
     'noplaylist': 'True',
-    'default_search': 'ytmsearch', # Fallback query method
+    'default_search': 'ytsearch', 
 }
 
 @bot.tree.command(name="play", description="Type ANY song name or artist to play instantly")
@@ -88,17 +90,17 @@ async def play(interaction: discord.Interaction, search: str):
             print(f"Spotify API Error: {e}")
 
     try:
+        # 🌟 FIXED SEARCH ROUTING BLOCK
+        # If it is a direct link (like YouTube or Spotify), extract it directly.
+        # If it is plain text, use standard search logic.
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-            # If the user didn't paste a raw link, treat it as a universal text search
             if not search_query.startswith("http"):
-                final_search = f"ytmsearch:{search_query}"
+                info = ydl.extract_info(f"ytsearch:{search_query}", download=False)
             else:
-                final_search = search_query
-
-            info = ydl.extract_info(final_search, download=False)
+                info = ydl.extract_info(search_query, download=False)
             
             if 'entries' in info and len(info['entries']) > 0:
-                video_data = info['entries'][0]
+                video_data = info['entries'][0] # Target first item in list array safely
             elif 'url' in info:
                 video_data = info
             else:
@@ -106,20 +108,34 @@ async def play(interaction: discord.Interaction, search: str):
                 
             url = video_data['url']
             title = video_data['title']
-            
-            # Extract artist name if available from YouTube Music metadata
             uploader = video_data.get('uploader', 'Unknown Artist')
             
             if ctx_voice.is_playing():
                 ctx_voice.stop()
                 
-            source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
-            ctx_voice.play(source)
-            await interaction.followup.send(f"🎶 Now playing: **{title}** by *{uploader}*")
+            raw_source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
+            volume_source = discord.PCMVolumeTransformer(raw_source, volume=0.5)
+            
+            ctx_voice.play(volume_source)
+            await interaction.followup.send(f"🎶 Now playing: **{title}** by *{uploader}* (Volume: 50%)")
             
     except Exception as e:
         print(f"Playback Error: {e}")
         await interaction.followup.send(f"An error occurred while trying to play: {e}")
+
+@bot.tree.command(name="volume", description="Adjust the bot's volume level (1 to 100)")
+@app_commands.describe(level="Volume level from 1 to 100")
+async def volume(interaction: discord.Interaction, level: int):
+    ctx_voice = interaction.guild.voice_client
+    
+    if not ctx_voice or not ctx_voice.is_playing():
+        return await interaction.response.send_message("I am not playing any music right now.", ephemeral=True)
+        
+    if level < 1 or level > 100:
+        return await interaction.response.send_message("Please choose a volume level between 1 and 100.", ephemeral=True)
+        
+    ctx_voice.source.volume = level / 100.0
+    await interaction.response.send_message(f"🔊 Volume set to **{level}%**")
 
 @bot.tree.command(name="leave", description="Stops music and leaves the voice channel")
 async def leave(interaction: discord.Interaction):

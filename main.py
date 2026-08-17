@@ -53,10 +53,13 @@ async def on_ready():
             print(f"Voice connection error on boot: {e}")
 
 FFMPEG_OPTIONS = {'options': '-vn'}
-# Optimized specifically to grab the best studio audio container
-YDL_OPTIONS = {'format': 'bestaudio/best', 'noplaylist': 'True'}
+YDL_OPTIONS = {
+    'format': 'bestaudio/best', 
+    'noplaylist': 'True',
+    'default_search': 'ytsearch', # Fallback query method
+}
 
-@bot.tree.command(name="play", description="Plays a song from YouTube Music or a Spotify Link")
+@bot.tree.command(name="play", description="Type ANY song name or artist to play instantly")
 async def play(interaction: discord.Interaction, search: str):
     await interaction.response.defer()
     
@@ -78,33 +81,41 @@ async def play(interaction: discord.Interaction, search: str):
             sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials())
             track_id = spotify_match.group(1)
             track_info = sp.track(track_id)
-            
             track_name = track_info['name']
             artist_name = track_info['artists'][0]['name']
             search_query = f"{track_name} {artist_name}"
         except Exception as e:
             print(f"Spotify API Error: {e}")
-            # Silently fallback to using whatever string they pasted
 
     try:
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-            # 🌟 CHANGED: Using 'ytmsearch:' now forces a search directly on YouTube Music!
-            info = ydl.extract_info(f"ytmsearch:{search_query}", download=False)
+            # If the user didn't paste a raw link, treat it as a universal text search
+            if not search_query.startswith("http"):
+                final_search = f"ytmsearch:{search_query}"
+            else:
+                final_search = search_query
+
+            info = ydl.extract_info(final_search, download=False)
             
             if 'entries' in info and len(info['entries']) > 0:
                 video_data = info['entries'][0]
+            elif 'url' in info:
+                video_data = info
             else:
-                return await interaction.followup.send("No official music tracks found for that search query.")
+                return await interaction.followup.send("Could not find any music matching that name.")
                 
             url = video_data['url']
             title = video_data['title']
+            
+            # Extract artist name if available from YouTube Music metadata
+            uploader = video_data.get('uploader', 'Unknown Artist')
             
             if ctx_voice.is_playing():
                 ctx_voice.stop()
                 
             source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
             ctx_voice.play(source)
-            await interaction.followup.send(f"Now playing from YT Music: **{title}** 🎶")
+            await interaction.followup.send(f"🎶 Now playing: **{title}** by *{uploader}*")
             
     except Exception as e:
         print(f"Playback Error: {e}")
@@ -120,4 +131,3 @@ async def leave(interaction: discord.Interaction):
 
 keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])
-

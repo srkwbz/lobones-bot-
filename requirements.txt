@@ -3,3 +3,4 @@ Flask
 PyNaCl
 yt-dlp
 ffmpeg-downloader
+spotipy

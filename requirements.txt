@@ -1,6 +1,4 @@
 discord.py[voice]
 Flask
 PyNaCl
-yt-dlp
 ffmpeg-downloader
-spotipy

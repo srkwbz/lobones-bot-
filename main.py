@@ -29,8 +29,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ==========================================
 # ⚠️ PLACE YOUR ID NUMBERS EXACTLY HERE:
 # ==========================================
-VOICE_CHANNEL_ID = 123456789012345678
-MY_SERVER_ID = 123456789012345678
+VOICE_CHANNEL_ID = 1537096867215843439
+MY_SERVER_ID = 1536466519012151362
 
 SPOTIFY_TRACK_REGEX = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
 

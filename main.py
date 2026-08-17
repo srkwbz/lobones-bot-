@@ -1,10 +1,13 @@
 import os
+import re
 import discord
 from discord import app_commands
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
 import yt_dlp as youtube_dl
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 
 app = Flask('')
 
@@ -23,9 +26,13 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# ==========================================
 # ⚠️ PLACE YOUR ID NUMBERS EXACTLY HERE:
-VOICE_CHANNEL_ID = 1537096867215843439
-MY_SERVER_ID = 1536466519012151362
+# ==========================================
+VOICE_CHANNEL_ID = 123456789012345678
+MY_SERVER_ID = 123456789012345678
+
+SPOTIFY_TRACK_REGEX = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
 
 @bot.event
 async def on_ready():
@@ -46,33 +53,59 @@ async def on_ready():
             print(f"Voice connection error on boot: {e}")
 
 FFMPEG_OPTIONS = {'options': '-vn'}
-YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist': 'True'}
+# Optimized specifically to grab the best studio audio container
+YDL_OPTIONS = {'format': 'bestaudio/best', 'noplaylist': 'True'}
 
-@bot.tree.command(name="play", description="Plays a song from YouTube")
+@bot.tree.command(name="play", description="Plays a song from YouTube Music or a Spotify Link")
 async def play(interaction: discord.Interaction, search: str):
     await interaction.response.defer()
+    
     if not interaction.user.voice:
         return await interaction.followup.send("You must be in a voice channel to play music.")
+    
     ctx_voice = interaction.guild.voice_client
     if not ctx_voice:
         try:
             ctx_voice = await interaction.user.voice.channel.connect()
         except Exception as e:
             return await interaction.followup.send(f"Could not connect to voice channel: {e}")
+            
+    spotify_match = re.match(SPOTIFY_TRACK_REGEX, search.strip())
+    search_query = search
+    
+    if spotify_match:
+        try:
+            sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials())
+            track_id = spotify_match.group(1)
+            track_info = sp.track(track_id)
+            
+            track_name = track_info['name']
+            artist_name = track_info['artists'][0]['name']
+            search_query = f"{track_name} {artist_name}"
+        except Exception as e:
+            print(f"Spotify API Error: {e}")
+            # Silently fallback to using whatever string they pasted
+
     try:
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(f"ytsearch:{search}", download=False)
+            # 🌟 CHANGED: Using 'ytmsearch:' now forces a search directly on YouTube Music!
+            info = ydl.extract_info(f"ytmsearch:{search_query}", download=False)
+            
             if 'entries' in info and len(info['entries']) > 0:
                 video_data = info['entries'][0]
             else:
-                return await interaction.followup.send("No songs found for that search query.")
+                return await interaction.followup.send("No official music tracks found for that search query.")
+                
             url = video_data['url']
             title = video_data['title']
+            
             if ctx_voice.is_playing():
                 ctx_voice.stop()
+                
             source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
             ctx_voice.play(source)
-            await interaction.followup.send(f"Now playing: **{title}** 🎶")
+            await interaction.followup.send(f"Now playing from YT Music: **{title}** 🎶")
+            
     except Exception as e:
         print(f"Playback Error: {e}")
         await interaction.followup.send(f"An error occurred while trying to play: {e}")
@@ -87,3 +120,4 @@ async def leave(interaction: discord.Interaction):
 
 keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])
+

@@ -24,8 +24,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ⚠️ PLACE YOUR ID NUMBERS EXACTLY HERE:
-VOICE_CHANNEL_ID = 123456789012345678
-MY_SERVER_ID = 123456789012345678
+VOICE_CHANNEL_ID = 1537096867215843439
+MY_SERVER_ID = 1536466519012151362
 
 @bot.event
 async def on_ready():
@@ -85,12 +85,5 @@ async def leave(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("I am not in a voice channel.")
 
-keep_alive()
-bot.run(os.environ['DISCORD_TOKEN'])
-
-
-# ==========================================
-# 4. RUN SYSTEM (DO NOT TOUCH)
-# ==========================================
 keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])

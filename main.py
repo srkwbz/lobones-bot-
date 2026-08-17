@@ -27,8 +27,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ==========================================
 # ⚠️ PLACE YOUR ID NUMBERS EXACTLY HERE:
 # ==========================================
-VOICE_CHANNEL_ID = 123456789012345678
-MY_SERVER_ID = 123456789012345678
+VOICE_CHANNEL_ID = 1537096867215843439
+MY_SERVER_ID = 1536466519012151362
 
 @bot.event
 async def on_ready():

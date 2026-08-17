@@ -52,15 +52,20 @@ async def on_ready():
         except Exception as e:
             print(f"Voice connection error on boot: {e}")
 
-FFMPEG_OPTIONS = {'options': '-vn'}
+FFMPEG_OPTIONS = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
+
+# 🌟 BANDCAMP OPTIMIZED CONFIGURATION
 YDL_OPTIONS = {
     'format': 'bestaudio/best', 
     'noplaylist': 'True',
-    'default_search': 'scsearch',
+    'default_search': 'bcsearch', # <- Automatically routes all plain text searches to Bandcamp
     'source_address': '0.0.0.0',
 }
 
-@bot.tree.command(name="play", description="Type ANY song name to play instantly from SoundCloud")
+@bot.tree.command(name="play", description="Type ANY song name to play instantly from Bandcamp")
 async def play(interaction: discord.Interaction, search: str):
     await interaction.response.defer()
     
@@ -90,20 +95,20 @@ async def play(interaction: discord.Interaction, search: str):
 
     try:
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+            # 🌟 CHANGED: Using 'bcsearch:' to look up plain text queries on Bandcamp
             if not search_query.startswith("http"):
-                info = ydl.extract_info(f"scsearch:{search_query}", download=False)
+                info = ydl.extract_info(f"bcsearch:{search_query}", download=False)
             else:
                 info = ydl.extract_info(search_query, download=False)
             
-            # 🌟 CRITICAL FIX: Safe unpacking of search results vs direct links
             if info is None:
                 return await interaction.followup.send("No results found or track is unavailable.")
                 
             if 'entries' in info:
                 if len(info['entries']) > 0:
-                    video_data = info['entries'][0] # Extract the first list item correctly using index 0
+                    video_data = info['entries'][0]
                 else:
-                    return await interaction.followup.send("Could not find any music matching that name on SoundCloud.")
+                    return await interaction.followup.send("Could not find any music matching that name on Bandcamp.")
             else:
                 video_data = info
                 
@@ -114,15 +119,15 @@ async def play(interaction: discord.Interaction, search: str):
             if ctx_voice.is_playing():
                 ctx_voice.stop()
                 
-            raw_source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
+            raw_source = discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS)
             volume_source = discord.PCMVolumeTransformer(raw_source, volume=0.5)
             
             ctx_voice.play(volume_source)
-            await interaction.followup.send(f"☁️ Now playing from SoundCloud: **{title}** by *{uploader}* (Volume: 50%)")
+            await interaction.followup.send(f"🎸 Now playing from Bandcamp: **{title}** by *{uploader}* (Volume: 50%)")
             
     except Exception as e:
         print(f"Playback Error: {e}")
-        await interaction.followup.send(f"An error occurred while trying to play from SoundCloud: {e}")
+        await interaction.followup.send(f"An error occurred while trying to play from Bandcamp: {e}")
 
 @bot.tree.command(name="volume", description="Adjust the bot's volume level (1 to 100)")
 @app_commands.describe(level="Volume level from 1 to 100")
@@ -148,3 +153,4 @@ async def leave(interaction: discord.Interaction):
 
 keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])
+

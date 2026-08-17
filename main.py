@@ -16,10 +16,10 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-VOICE_CHANNEL_ID = 123456789012345678 
+VOICE_CHANNEL_ID = 1537096867215843439
 
 # Replace this number with your actual Server (Guild) ID
-MY_SERVER_ID = 123456789012345678  
+MY_SERVER_ID = 1536466519012151362 
 
 @bot.event
 async def on_ready():

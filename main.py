@@ -81,8 +81,46 @@ YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist': 'True'}
 # 1. Slash command for Play
 @bot.tree.command(name="play", description="Plays a song from YouTube")
 async def play(interaction: discord.Interaction, search: str):
-    # Slash commands require you to defer or respond within 3 seconds so they don't timeout
+    # Defers the response to prevent a Discord 3-second timeout
     await interaction.response.defer()
+    
+    if not interaction.user.voice:
+        return await interaction.followup.send("You must be in a voice channel to play music.")
+    
+    # Connect to voice or get current voice client
+    ctx_voice = interaction.guild.voice_client
+    if not ctx_voice:
+        try:
+            ctx_voice = await interaction.user.voice.channel.connect()
+        except Exception as e:
+            return await interaction.followup.send(f"Could not connect to voice channel: {e}")
+    
+    try:
+        with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+            # Look up the track using ytsearch
+            info = ydl.extract_info(f"ytsearch:{search}", download=False)
+            
+            # CRITICAL FIX: Extract the first entry from search results
+            if 'entries' in info and len(info['entries']) > 0:
+                video_data = info['entries'][0]
+            else:
+                return await interaction.followup.send("No songs found for that search query.")
+                
+            url = video_data['url']
+            title = video_data['title']
+            
+            # Handle audio stream playback
+            if ctx_voice.is_playing():
+                ctx_voice.stop() # Stops current audio before playing a new one
+                
+            source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
+            ctx_voice.play(source)
+            await interaction.followup.send(f"Now playing: **{title}** 🎶")
+            
+    except Exception as e:
+        print(f"Playback Error: {e}")
+        await interaction.followup.send(f"An error occurred while trying to play: {e}")
+
     
     if not interaction.user.voice:
         return await interaction.followup.send("You must be in a voice channel to play music.")

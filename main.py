@@ -1,13 +1,11 @@
 import os
-import re
 import discord
 from discord import app_commands
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
-import yt_dlp as youtube_dl
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+import urllib.request
+import json
 
 app = Flask('')
 
@@ -29,10 +27,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ==========================================
 # ⚠️ PLACE YOUR ID NUMBERS EXACTLY HERE:
 # ==========================================
-VOICE_CHANNEL_ID = 1537096867215843439
-MY_SERVER_ID = 1536466519012151362
-
-SPOTIFY_TRACK_REGEX = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
+VOICE_CHANNEL_ID = 123456789012345678
+MY_SERVER_ID = 123456789012345678
 
 @bot.event
 async def on_ready():
@@ -57,15 +53,7 @@ FFMPEG_OPTIONS = {
     'options': '-vn'
 }
 
-# 🌟 BANDCAMP OPTIMIZED CONFIGURATION
-YDL_OPTIONS = {
-    'format': 'bestaudio/best', 
-    'noplaylist': 'True',
-    'default_search': 'bcsearch', # <- Automatically routes all plain text searches to Bandcamp
-    'source_address': '0.0.0.0',
-}
-
-@bot.tree.command(name="play", description="Type ANY song name to play instantly from Bandcamp")
+@bot.tree.command(name="play", description="Type a genre or station name to stream live audio instantly (e.g. lofi, rock, chill)")
 async def play(interaction: discord.Interaction, search: str):
     await interaction.response.defer()
     
@@ -78,56 +66,38 @@ async def play(interaction: discord.Interaction, search: str):
             ctx_voice = await interaction.user.voice.channel.connect()
         except Exception as e:
             return await interaction.followup.send(f"Could not connect to voice channel: {e}")
-            
-    spotify_match = re.match(SPOTIFY_TRACK_REGEX, search.strip())
-    search_query = search
-    
-    if spotify_match:
-        try:
-            sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials())
-            track_id = spotify_match.group(1)
-            track_info = sp.track(track_id)
-            track_name = track_info['name']
-            artist_name = track_info['artists']['name']
-            search_query = f"{track_name} {artist_name}"
-        except Exception as e:
-            print(f"Spotify API Error: {e}")
 
     try:
-        with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-            # 🌟 CHANGED: Using 'bcsearch:' to look up plain text queries on Bandcamp
-            if not search_query.startswith("http"):
-                info = ydl.extract_info(f"bcsearch:{search_query}", download=False)
-            else:
-                info = ydl.extract_info(search_query, download=False)
+        # Search the global public radio API using the search keyword
+        encoded_query = urllib.parse.quote(search.strip())
+        api_url = f"https://radio-browser.info{encoded_query}"
+        
+        req = urllib.request.Request(api_url, headers={'User-Agent': 'DiscordBot/1.0'})
+        with urllib.request.urlopen(req) as response:
+            stations = json.loads(response.read().decode())
             
-            if info is None:
-                return await interaction.followup.send("No results found or track is unavailable.")
-                
-            if 'entries' in info:
-                if len(info['entries']) > 0:
-                    video_data = info['entries'][0]
-                else:
-                    return await interaction.followup.send("Could not find any music matching that name on Bandcamp.")
-            else:
-                video_data = info
-                
-            url = video_data['url']
-            title = video_data.get('title', 'Unknown Title')
-            uploader = video_data.get('uploader', 'Unknown Artist')
+        if not stations:
+            return await interaction.followup.send(f"Could not find any live streams matching: **{search}**")
             
-            if ctx_voice.is_playing():
-                ctx_voice.stop()
-                
-            raw_source = discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS)
-            volume_source = discord.PCMVolumeTransformer(raw_source, volume=0.5)
+        # Select the first functional station match
+        station_data = stations[0]
+        stream_url = station_data['url_resolved']
+        station_name = station_data['name']
+        tags = station_data.get('tags', 'music')
+        
+        if ctx_voice.is_playing():
+            ctx_voice.stop()
             
-            ctx_voice.play(volume_source)
-            await interaction.followup.send(f"🎸 Now playing from Bandcamp: **{title}** by *{uploader}* (Volume: 50%)")
-            
+        # Stream the raw audio directly without downloading/parsing packages
+        raw_source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
+        volume_source = discord.PCMVolumeTransformer(raw_source, volume=0.5)
+        
+        ctx_voice.play(volume_source)
+        await interaction.followup.send(f"📻 Now streaming live: **{station_name}** ({tags}) (Volume: 50%)")
+        
     except Exception as e:
-        print(f"Playback Error: {e}")
-        await interaction.followup.send(f"An error occurred while trying to play from Bandcamp: {e}")
+        print(f"Stream Error: {e}")
+        await interaction.followup.send(f"An error occurred while trying to connect to the stream: {e}")
 
 @bot.tree.command(name="volume", description="Adjust the bot's volume level (1 to 100)")
 @app_commands.describe(level="Volume level from 1 to 100")
@@ -153,4 +123,5 @@ async def leave(interaction: discord.Interaction):
 
 keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])
+
 

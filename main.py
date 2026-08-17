@@ -114,8 +114,6 @@ async def leave(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("I am not in a voice channel.")
 
-
-
 # ==========================================
 # 3. KEEP THIS BOTTOM SECTION (The startup triggers)
 # ==========================================

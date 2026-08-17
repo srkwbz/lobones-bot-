@@ -29,8 +29,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ==========================================
 # ⚠️ PLACE YOUR ID NUMBERS EXACTLY HERE:
 # ==========================================
-VOICE_CHANNEL_ID = 1537096867215843439
-MY_SERVER_ID = 1536466519012151362
+VOICE_CHANNEL_ID = 123456789012345678
+MY_SERVER_ID = 123456789012345678
 
 SPOTIFY_TRACK_REGEX = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
 
@@ -53,17 +53,12 @@ async def on_ready():
             print(f"Voice connection error on boot: {e}")
 
 FFMPEG_OPTIONS = {'options': '-vn'}
-
-# 🌟 SOUNDCLOUD OPTIMIZED CONFIGURATION
-# 🌟 UPDATED SOUNDCLOUD CONFIGURATION TO BYPASS DRM TRACKS
 YDL_OPTIONS = {
     'format': 'bestaudio/best', 
     'noplaylist': 'True',
     'default_search': 'scsearch',
-    'ignoreerrors': True,         # Skip broken/DRM tracks automatically
-    'source_address': '0.0.0.0', # Prevents geographic IP blocking on Render
+    'source_address': '0.0.0.0',
 }
-
 
 @bot.tree.command(name="play", description="Type ANY song name to play instantly from SoundCloud")
 async def play(interaction: discord.Interaction, search: str):
@@ -95,21 +90,25 @@ async def play(interaction: discord.Interaction, search: str):
 
     try:
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-            # 🌟 CHANGED: Using 'scsearch:' to look up plain text queries on SoundCloud
             if not search_query.startswith("http"):
                 info = ydl.extract_info(f"scsearch:{search_query}", download=False)
             else:
                 info = ydl.extract_info(search_query, download=False)
             
-            if 'entries' in info and len(info['entries']) > 0:
-                video_data = info['entries']
-            elif 'url' in info:
-                video_data = info
+            # 🌟 CRITICAL FIX: Safe unpacking of search results vs direct links
+            if info is None:
+                return await interaction.followup.send("No results found or track is unavailable.")
+                
+            if 'entries' in info:
+                if len(info['entries']) > 0:
+                    video_data = info['entries'][0] # Extract the first list item correctly using index 0
+                else:
+                    return await interaction.followup.send("Could not find any music matching that name on SoundCloud.")
             else:
-                return await interaction.followup.send("Could not find any music matching that name on SoundCloud.")
+                video_data = info
                 
             url = video_data['url']
-            title = video_data['title']
+            title = video_data.get('title', 'Unknown Title')
             uploader = video_data.get('uploader', 'Unknown Artist')
             
             if ctx_voice.is_playing():
@@ -149,4 +148,3 @@ async def leave(interaction: discord.Interaction):
 
 keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])
-
